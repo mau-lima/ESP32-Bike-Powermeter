@@ -139,6 +139,15 @@ public:
         pCharacteristicPower->notify();
     }
 
+    void sendValueThroughPower(uint32_t debugValue){ //debug method, used because i want to get ADC readings while not plugging
+                                                    //  any additional stuff to the circuit so as to not disturb the excitation voltage
+                                                    //also, nRF Connect shows a 4-byte value of bytes DDCCBBAA with AA being the least significant byte as AA-BB-CC-DD
+                                                    //like, the number 0x00000102 is shown as 0x02-01-00-00 
+                                                    //additional testing: sending the debugValue 0x0A0B0C0D yields  "0x0D-0C-0B-0A" which confirms the above
+        pCharacteristicPower->setValue((uint8_t *)&debugValue, 4);
+        pCharacteristicPower->notify();
+    }
+
     void sendCSC(uint64_t lastCET, uint64_t cumulativeRevolutions)
     {
         CSCTxValue = (lastCET << 24) | (cumulativeRevolutions << 8) | CSCFlags;
