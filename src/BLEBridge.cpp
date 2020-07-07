@@ -10,7 +10,7 @@
 #define SENSORPOS_CHARACTERISTIC_UUID "00002A5D-0000-1000-8000-00805F9B34FB"
 #define POWERFEATURE_CHARACTERISTIC_UUID "00002A65-0000-1000-8000-00805F9B34FB"
 
-#define LED_PIN 2
+// #define LED_PIN 2
 
 #define CSC_SERVICE_UUID "00001816-0000-1000-8000-00805F9B34FB"
 #define CSC_MEASUREMENT_CHARACTERISTIC_UUID "00002A5B-0000-1000-8000-00805F9B34FB"
@@ -28,13 +28,13 @@ private:
     void onConnect(BLEServer *pServer) //todo add a reference to deviceconnected
     {
         deviceConnected=true;
-        digitalWrite(LED_PIN, HIGH);
+        // digitalWrite(LED_PIN, HIGH);
     };
 
     void onDisconnect(BLEServer *pServer)
     {
         deviceConnected=false;
-        digitalWrite(LED_PIN, LOW);
+        // digitalWrite(LED_PIN, LOW);
     }
 };
 
@@ -64,7 +64,7 @@ public:
 
     void initialize()
     {
-        pinMode(LED_PIN, OUTPUT);
+        // pinMode(LED_PIN, OUTPUT);
         // Create the BLE Device
         BLEDevice::init("ESP32MauPowerMeter"); // weirdly enough names with spaces do not seem to work
 
