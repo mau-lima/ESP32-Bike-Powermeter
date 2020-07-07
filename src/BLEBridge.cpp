@@ -133,7 +133,9 @@ public:
 
     void sendPower(int16_t powerReading)
     {
-        powerTxValue = (powerReading << 16) | powerFlags; //very inefficient but just for readability
+        int32_t power32 = powerReading;
+
+        powerTxValue = (power32 << 16) | powerFlags; //very inefficient but just for readability
         pCharacteristicPower->setValue((uint8_t *)&powerTxValue, 4);
         pCharacteristicPower->notify();
     }

@@ -84,7 +84,7 @@ void setup()
 
 //reading holders
 int16_t powerReading = 0;           //in W
-uint64_t cumulativeRevolutions = 0; //a represents the total number of times a crank rotates
+uint16_t cumulativeRevolutions = 0; //a represents the total number of times a crank rotates
 
 uint16_t lastCET = 0;      //it NEEDS to be an uint16_t for it to roll over properly  
 /*lastCrankEvent: The 'crank event time' is a free-running-count of 1/1024 second units and it 
@@ -101,29 +101,17 @@ represents the time when the crank revolution was detected by the crank rotation
 
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
-uint16_t loopDelay = 350U; //to help in artificial rpm generation
-//i picked 350 because at 150rpm cadence, a full revolution takes 400 ms and i need it to report properly.
 
-uint64_t lastSentTime = -1;
-
-int16_t accFirstVal;
-int16_t signFirstVal;
 
 void loop()
 {
   // notify changed value
   if (deviceConnected)
   {
-
-    //get data
-    
     uint64_t i = 0;
     double forceAccumulator = 0;
-
-    long loopStartTime = millis();
+    uint32_t loopStartTime = millis();
     uint16_t loopStartAngle = crankAngle();
-    delay(1); //just in case? TODO remove
-
     while(crankAngle()>loopStartAngle){
       forceAccumulator += loadcell.get_units(10);
       i++;
