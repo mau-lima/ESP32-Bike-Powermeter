@@ -6,6 +6,8 @@
 #include "globals.h"
 #include "HX711.h"
 #include "Wire.h"
+
+
 #include "MPU6050.h"
 
 #include "BLEBridge.cpp" //TODO can this be swapped out for an .h?
@@ -18,7 +20,7 @@ BLEBridge *bluetooth = new BLEBridge();
 HX711 loadcell;
 
 // 1. HX711 circuit wiring
-const int LOADCELL_DOUT_PIN = 2;
+const int LOADCELL_DOUT_PIN = 4;
 const int LOADCELL_SCK_PIN = 3;
 const double LOADCELL_SCALE_VALUE = 1650;
 
@@ -99,16 +101,16 @@ void loop()
   if (deviceConnected)
   {
 
-    while (crankAngle() < 268 || crankAngle() > 272)
+    while (crankAngle() < 260)
     {
       digitalWrite(LED_PIN, HIGH);
       delay(1); //spinlock to begin at approx.270 degrees!!
     }
     digitalWrite(LED_PIN, LOW);
 
-    uint32_t loopStartTime = millis();
+    long loopStartTime = millis();
 
-    while (crankAngle() <= 359)
+    while (crankAngle() >20) //generous
     {
       digitalWrite(LED_PIN, HIGH);
       delay(1);
@@ -119,19 +121,18 @@ void loop()
     double forceAccumulator = 0;
     while (crankAngle() <= 180)
     { //this will oversample on lower cadences
-      forceAccumulator += loadcell.get_units(10);
+      forceAccumulator += loadcell.get_units(1);
       i++;
-      delay(10);
     }
 
-    while (crankAngle() <= 267)
+    while (crankAngle() <= 250)
     {
       digitalWrite(LED_PIN, HIGH);
       delay(1);
     }
     digitalWrite(LED_PIN, LOW);
 
-    long revPeriod = (millis() - loopStartTime) / 1000; //in seconds
+    long revPeriod = (millis() - loopStartTime); //in ms
     //Power = 2*Work/time = 2*avgForce/tangentialSpeed = 2*avgForce/(2*pi*cranklength/revPeriod). The 2 is because this is a single sided power meter so its only measuring one leg
     double avgForce = forceAccumulator / i;
     double tgSpeed = 2 * 3.14159 * crankLength / revPeriod;
@@ -140,7 +141,7 @@ void loop()
     cumulativeRevolutions += 1;
     lastCET += revPeriod * 1000 / 1024; //uhh TODO check what happens when this guy rolls over
 
-    bluetooth->sendPower(powerReading);
+    bluetooth->sendPower(revPeriod);
     bluetooth->sendCSC(lastCET, cumulativeRevolutions); //these are async luckily
   }
   // disconnecting
