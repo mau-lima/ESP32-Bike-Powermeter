@@ -38,7 +38,7 @@ private:
     }
 };
 
-class BLEPowerCSC
+class BLEBridge
 { //a class for holding bluetooth-related code
 private:
     BLEServer *pServer = NULL;
@@ -58,7 +58,7 @@ private:
     bool oldDeviceConnected = false;
 
 public:
-    BLEPowerCSC()
+    BLEBridge()
     { // a constructor
     }
 
@@ -147,9 +147,12 @@ public:
         pCharacteristicPower->notify();
     }
 
-    void sendCSC(uint64_t lastCET, uint64_t cumulativeRevolutions)
+    void sendCSC(uint16_t lastCET, uint16_t cumulativeRevolutions)
     {
-        CSCTxValue = (lastCET << 24) | (cumulativeRevolutions << 8) | CSCFlags;
+        uint64_t lastCET64 = lastCET; //todo this might be optimizable
+        uint64_t cumRev64 = cumulativeRevolutions;
+
+        CSCTxValue = (lastCET64 << 24) | (cumRev64 << 8) | CSCFlags;
         pCharacteristicCSC->setValue((uint8_t *)&CSCTxValue, 5);
         pCharacteristicCSC->notify();
     }
