@@ -11,11 +11,12 @@
 #include "BLEBridge.cpp" //TODO can this be swapped out for an .h?
 
 #define LED_PIN 2
-
+#define minAccelVal -16383
+#define maxAccelVal 16384
 
 const double crankLength = 0.1725; //in meters
-const int LOADCELL_DOUT_PIN = 4;
-const int LOADCELL_SCK_PIN = 3;
+const int LOADCELL_DOUT_PIN = 22;
+const int LOADCELL_SCK_PIN = 23;
 const double LOADCELL_SCALE_VALUE = 1650;
 
 const int ACCEL_SCL_PIN = 19;
@@ -25,37 +26,20 @@ BLEBridge *bluetooth = new BLEBridge();
 HX711 loadcell;
 MPU6050 accel; //I2C address 0x53
 
-/*This function should return an angle from 0-359, whatever trig you use is fine as long as it works.
-It could possibly be done with less math, i might be overthinking it
-0 degrees = crank pointing up
-90 degrees = crank pointing forwards (max torque)
-TODO check how it works when leaning hard
+/*
+90 degrees = crank pointing up
+180 degrees = crank pointing forwards (max torque)
 */
-uint16_t crankAngle()
+uint16_t getCrankAngle()
 {
   int16_t ax;
   int16_t ay;
   int16_t az;
   accel.getAcceleration(&ax, &ay, &az);
-  float atotal = sqrt((ax * ax) + (ay * ay));
-  float roll = asin((float)ax / atotal) * -57.296;
-
-  uint16_t result = 0;
-
-  if (roll > 0)
-    if (ay > 0)
-      result = (uint16_t)roll; //quadrant 1
-    else
-      result = 180 - (uint16_t)roll; //quadrant 2
-  else if (ay < 0)
-    result = 180 - (uint16_t)roll; //quadrant 3
-  else
-    result = 360 + (uint16_t)roll; //quadrant 4
-
-  return result;
-
-
-
+  int xAng = map(ax, minAccelVal, maxAccelVal, -90, 90);
+  int yAng = map(ay, minAccelVal, maxAccelVal, -90, 90);
+  uint16_t crankAngle = RAD_TO_DEG * (atan2(-yAng, -xAng) + PI);
+  return crankAngle;
 }
 
 void setup()
@@ -68,8 +52,10 @@ void setup()
 
   //loadcell.set_scale(); //these are for debug
   //loadcell.tare();
+  // Serial.begin(115200);
+  // Serial.println("INIT!");
 
-  Wire.begin(ACCEL_SDA_PIN,ACCEL_SCL_PIN);
+  Wire.begin(ACCEL_SDA_PIN, ACCEL_SCL_PIN);
   accel.initialize();
 }
 
@@ -92,44 +78,59 @@ represents the time when the crank revolution was detected by the crank rotation
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
-bool transmitted = false;
+/*
+0 = measuring
+1 = transmitting
+2 = already transmitting, idling
+
+it goes 0 -> 1 -> 2 -> 0 -> 1 -> ... no backsteps
+*/
+int state = 2;
+
 long loopStartTime = 0;
+uint16_t crankAngle = 0;
+long revPeriod = 1;
+
 void loop()
 {
   // notify changed value
   if (deviceConnected)
   {
-    if (crankAngle() < 180) //measure
+    crankAngle = getCrankAngle();
+    switch (state)
     {
-      //MEASURE
-      if (transmitted)
+    case 0: /*Measure state*/
+      if (crankAngle < 270)
       {
-        transmitted = false;
-        loopStartTime = millis();
-      }
-      //todo add measuring logic here
-      digitalWrite(LED_PIN,HIGH);
-    }
-    else{ //send
-      if(transmitted){
-        //do nothing, all done!
-        digitalWrite(LED_PIN,LOW);
+        //todo add measuring logic here
+        digitalWrite(LED_PIN, HIGH);
       }
       else
       {
-        long revPeriod = (millis() - loopStartTime) * 2; //times 2 because i only measured 180 degrees ha
-        cumulativeRevolutions++;
-
-        lastCET += revPeriod * 1000 / 1024;
-
-        bluetooth->sendPower(revPeriod);
-        bluetooth->sendCSC(lastCET, cumulativeRevolutions);
-        transmitted = true;
+        // Serial.println("0->1");
+        state = 1;
       }
-      
+      break;
+    case 1: /*Transmit state*/
+      revPeriod = (millis() - loopStartTime) * 2; //times 2 because i only measured 180 degrees ha
+      cumulativeRevolutions++;
+      lastCET += revPeriod * 1000 / 1024;
+      bluetooth->sendPower(revPeriod);
+      bluetooth->sendCSC(lastCET, cumulativeRevolutions);
 
+      // Serial.println("1->2");
+      state = 2;
+      break;
+    case 2: /*All done state*/
+      digitalWrite(LED_PIN, LOW);
+      if (crankAngle > 90 && crankAngle < 105)
+      {
+        loopStartTime = millis();
+        state = 0;
+        // Serial.print("2->0");
+      }
+      break;
     }
-
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected)
