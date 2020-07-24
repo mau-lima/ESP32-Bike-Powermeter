@@ -6,29 +6,24 @@
 #include "globals.h"
 #include "HX711.h"
 #include "Wire.h"
-
-
 #include "MPU6050.h"
 
 #include "BLEBridge.cpp" //TODO can this be swapped out for an .h?
 
 #define LED_PIN 2
 
+
 const double crankLength = 0.1725; //in meters
-
-BLEBridge *bluetooth = new BLEBridge();
-HX711 loadcell;
-
-// 1. HX711 circuit wiring
 const int LOADCELL_DOUT_PIN = 4;
 const int LOADCELL_SCK_PIN = 3;
 const double LOADCELL_SCALE_VALUE = 1650;
 
-// class default I2C address is 0x53
-// specific I2C addresses may be passed as a parameter here
-// ALT low = 0x53 (default for SparkFun 6DOF board)
-// ALT high = 0x1D
-MPU6050 accel;
+const int ACCEL_SCL_PIN = 19;
+const int ACCEL_SDA_PIN = 21;
+
+BLEBridge *bluetooth = new BLEBridge();
+HX711 loadcell;
+MPU6050 accel; //I2C address 0x53
 
 /*This function should return an angle from 0-359, whatever trig you use is fine as long as it works.
 It could possibly be done with less math, i might be overthinking it
@@ -42,7 +37,6 @@ uint16_t crankAngle()
   int16_t ay;
   int16_t az;
   accel.getAcceleration(&ax, &ay, &az);
-
   float atotal = sqrt((ax * ax) + (ay * ay));
   float roll = asin((float)ax / atotal) * -57.296;
 
@@ -59,6 +53,9 @@ uint16_t crankAngle()
     result = 360 + (uint16_t)roll; //quadrant 4
 
   return result;
+
+
+
 }
 
 void setup()
@@ -72,7 +69,7 @@ void setup()
   //loadcell.set_scale(); //these are for debug
   //loadcell.tare();
 
-  Wire.begin();
+  Wire.begin(ACCEL_SDA_PIN,ACCEL_SCL_PIN);
   accel.initialize();
 }
 
@@ -95,54 +92,44 @@ represents the time when the crank revolution was detected by the crank rotation
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
+bool transmitted = false;
+long loopStartTime = 0;
 void loop()
 {
   // notify changed value
   if (deviceConnected)
   {
-
-    while (crankAngle() < 260)
+    if (crankAngle() < 180) //measure
     {
-      digitalWrite(LED_PIN, HIGH);
-      delay(1); //spinlock to begin at approx.270 degrees!!
+      //MEASURE
+      if (transmitted)
+      {
+        transmitted = false;
+        loopStartTime = millis();
+      }
+      //todo add measuring logic here
+      digitalWrite(LED_PIN,HIGH);
     }
-    digitalWrite(LED_PIN, LOW);
+    else{ //send
+      if(transmitted){
+        //do nothing, all done!
+        digitalWrite(LED_PIN,LOW);
+      }
+      else
+      {
+        long revPeriod = (millis() - loopStartTime) * 2; //times 2 because i only measured 180 degrees ha
+        cumulativeRevolutions++;
 
-    long loopStartTime = millis();
+        lastCET += revPeriod * 1000 / 1024;
 
-    while (crankAngle() >20) //generous
-    {
-      digitalWrite(LED_PIN, HIGH);
-      delay(1);
+        bluetooth->sendPower(revPeriod);
+        bluetooth->sendCSC(lastCET, cumulativeRevolutions);
+        transmitted = true;
+      }
+      
+
     }
-    digitalWrite(LED_PIN, LOW);
 
-    uint64_t i = 0;
-    double forceAccumulator = 0;
-    while (crankAngle() <= 180)
-    { //this will oversample on lower cadences
-      forceAccumulator += loadcell.get_units(1);
-      i++;
-    }
-
-    while (crankAngle() <= 250)
-    {
-      digitalWrite(LED_PIN, HIGH);
-      delay(1);
-    }
-    digitalWrite(LED_PIN, LOW);
-
-    long revPeriod = (millis() - loopStartTime); //in ms
-    //Power = 2*Work/time = 2*avgForce/tangentialSpeed = 2*avgForce/(2*pi*cranklength/revPeriod). The 2 is because this is a single sided power meter so its only measuring one leg
-    double avgForce = forceAccumulator / i;
-    double tgSpeed = 2 * 3.14159 * crankLength / revPeriod;
-    powerReading = 2 * avgForce / tgSpeed;
-
-    cumulativeRevolutions += 1;
-    lastCET += revPeriod * 1000 / 1024; //uhh TODO check what happens when this guy rolls over
-
-    bluetooth->sendPower(revPeriod);
-    bluetooth->sendCSC(lastCET, cumulativeRevolutions); //these are async luckily
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected)
